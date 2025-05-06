@@ -226,7 +226,7 @@
             // Using an alternative Hetzner mirror for the 1GB test file
             // Note: This URL might still have CORS restrictions that prevent reading the response body.
             // A dedicated server endpoint is needed for reliable download speed testing.
-            const downloadUrl = 'https://nbg1-speed.hetzner.com/1GB.bin?_=' + new Date().getTime(); // Appending timestamp to prevent caching
+            const downloadUrl = 'https://testfile.org/1.3GBiconpng' + new Date().getTime(); // Appending timestamp to prevent caching
             const downloadStartTime = performance.now();
             let downloadSuccess = false;
 
