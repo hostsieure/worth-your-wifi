@@ -96,6 +96,8 @@
 
          <div class="warning">
             <strong>Warning:</strong> This test repeatedly downloads a 1GB file. This will consume significant data and memory. It may impact your device's performance and could incur high data costs depending on your internet plan. Use with caution.
+             <br><br>
+             Note: The download test relies on a public test file. If the download test fails, it might be due to server issues or restrictions on the test file's host, not necessarily your internet connection.
         </div>
 
         <div class="metric">
@@ -190,11 +192,16 @@
 
             const pingStartTime = performance.now();
             try {
-                // Using a small, reliable resource for ping
-                const response = await fetch('https://www.google.com/favicon.ico?_=' + new Date().getTime(), { cache: 'no-store' });
-                if (!response.ok) {
-                     throw new Error(`HTTP status: ${response.status}`);
-                }
+                // Using a small, reliable resource for ping with no-cors mode
+                // This prevents CORS errors but means we can't inspect the response content.
+                // We only need the time taken, which this allows.
+                const response = await fetch('https://www.google.com/favicon.ico?_=' + new Date().getTime(), {
+                    cache: 'no-store',
+                    mode: 'no-cors' // Set mode to no-cors to bypass CORS policy
+                });
+
+                // In no-cors mode, response.ok is always true for successful fetch,
+                // and status is 0. We just measure the time.
                 const pingEndTime = performance.now();
                 const ping = Math.round(pingEndTime - pingStartTime);
                 pingResult.textContent = `${ping} ms`;
@@ -217,6 +224,8 @@
             downloadResult.textContent = '- Mbps'; // Reset display
 
             // Using an alternative Hetzner mirror for the 1GB test file
+            // Note: This URL might still have CORS restrictions that prevent reading the response body.
+            // A dedicated server endpoint is needed for reliable download speed testing.
             const downloadUrl = 'https://nbg1-speed.hetzner.com/1GB.bin?_=' + new Date().getTime(); // Appending timestamp to prevent caching
             const downloadStartTime = performance.now();
             let downloadSuccess = false;
