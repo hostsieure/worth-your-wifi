@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Continuous Speed Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: "Inter", sans-serif;
+            background-color: #f0f4f8;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* Align items to the top */
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 900px; /* Increased max-width */
+            text-align: center;
+        }
+        h1 {
+            color: #1a202c;
+            margin-bottom: 20px;
+        }
+        .metric {
+            margin-bottom: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            background-color: #e2e8f0;
+        }
+        .metric h2 {
+            font-size: 1.25rem;
+            font-weight: bold;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+        .metric p {
+            font-size: 1.5rem;
+            color: #4a5568;
+        }
+         .warning {
+            background-color: #fefcbf; /* Yellow background */
+            color: #744210; /* Dark yellow text */
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: left;
+            font-size: 0.9rem;
+        }
+        .button {
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
+        }
+        .start-button {
+            background-color: #48bb78;
+            color: white;
+        }
+        .start-button:hover {
+            background-color: #38a169;
+        }
+        .stop-button {
+            background-color: #f56565;
+            color: white;
+            margin-left: 10px;
+        }
+        .stop-button:hover {
+            background-color: #e53e3e;
+        }
+        .status {
+            margin-top: 20px;
+            font-size: 1rem;
+            color: #4a5568;
+            min-height: 1.5em; /* Reserve space to prevent layout shifts */
+        }
+        .graph-container {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #cbd5e0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-2xl font-bold mb-6">Continuous Internet Speed Test</h1>
+
+         <div class="warning">
+            <strong>Warning:</strong> This test repeatedly downloads a 1GB file. This will consume significant data and memory. It may impact your device's performance and could incur high data costs depending on your internet plan. Use with caution.
+        </div>
+
+        <div class="metric">
+            <h2 class="text-xl font-semibold">Ping (google.com)</h2>
+            <p id="ping-result" class="text-2xl">- ms</p>
+        </div>
+
+        <div class="metric">
+            <h2 class="text-xl font-semibold">Download Speed</h2>
+            <p id="download-result" class="text-2xl">- Mbps</p>
+        </div>
+
+        <button id="start-test" class="button start-button">Start Test</button>
+        <button id="stop-test" class="button stop-button" disabled>Stop Test</button>
+
+        <div id="status" class="status">Status: Idle</div>
+
+        <div class="graph-container">
+            <canvas id="speed-chart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        let pingInterval;
+        let downloadTimeout; // Use timeout for sequential downloads
+        let isTesting = false;
+        const pingResult = document.getElementById('ping-result');
+        const downloadResult = document.getElementById('download-result');
+        const statusDiv = document.getElementById('status');
+        const startButton = document.getElementById('start-test');
+        const stopButton = document.getElementById('stop-test');
+        const speedChartCanvas = document.getElementById('speed-chart').getContext('2d');
+
+        // Data arrays for the graph
+        const timeLabels = [];
+        const downloadData = [];
+        const MAX_DATA_POINTS = 50; // Limit data points on the graph
+
+        // Chart.js configuration
+        const speedChart = new Chart(speedChartCanvas, {
+            type: 'line',
+            data: {
+                labels: timeLabels,
+                datasets: [
+                    {
+                        label: 'Download (Mbps)',
+                        borderColor: '#48bb78', // Green
+                        data: downloadData,
+                        fill: false,
+                        tension: 0.1,
+                        pointRadius: 3 // Show points
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false, // Allow chart to fill container width
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Test Number'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Speed (Mbps)'
+                        },
+                        beginAtZero: true // Start y-axis at 0
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    title: {
+                        display: true,
+                        text: 'Download Speed Over Time'
+                    },
+                    legend: {
+                         display: false // Hide legend as there's only one dataset
+                    }
+                }
+            }
+        });
+
+        // Function to run ping test
+        async function runPingTest() {
+             if (!isTesting) return;
+
+            const pingStartTime = performance.now();
+            try {
+                // Using a small, reliable resource for ping
+                const response = await fetch('https://www.google.com/favicon.ico?_=' + new Date().getTime(), { cache: 'no-store' });
+                if (!response.ok) {
+                     throw new Error(`HTTP status: ${response.status}`);
+                }
+                const pingEndTime = performance.now();
+                const ping = Math.round(pingEndTime - pingStartTime);
+                pingResult.textContent = `${ping} ms`;
+                 // Optional: Log ping to console for debugging
+                 // console.log(`Ping: ${ping} ms`);
+            } catch (error) {
+                pingResult.textContent = 'Error';
+                 console.error("Ping test failed:", error);
+            }
+        }
+
+        // Function to run download test
+        async function runDownloadTest() {
+            if (!isTesting) {
+                 statusDiv.textContent = 'Status: Stopping download tests.';
+                 return; // Stop the loop if testing is false
+            }
+
+            statusDiv.textContent = 'Status: Running download test (1GB)...';
+            downloadResult.textContent = '- Mbps'; // Reset display
+
+            // Using an alternative Hetzner mirror for the 1GB test file
+            const downloadUrl = 'https://nbg1-speed.hetzner.com/1GB.bin?_=' + new Date().getTime(); // Appending timestamp to prevent caching
+            const downloadStartTime = performance.now();
+            let downloadSuccess = false;
+
+            try {
+                const response = await fetch(downloadUrl);
+                 if (!response.ok) {
+                     throw new Error(`HTTP status: ${response.status}`);
+                 }
+
+                // Read the response body as a blob (stores in memory)
+                const blob = await response.blob();
+
+                const downloadEndTime = performance.now();
+                const duration = (downloadEndTime - downloadStartTime) / 1000; // Duration in seconds
+                const bitsLoaded = blob.size * 8; // Convert bytes to bits
+                const speedMbps = (bitsLoaded / duration / 1024 / 1024).toFixed(2); // Convert bits/sec to Mbps
+
+                downloadResult.textContent = `${speedMbps} Mbps`;
+                downloadSuccess = true;
+
+                // Add data to graph arrays, maintaining the limit
+                if (timeLabels.length >= MAX_DATA_POINTS) {
+                    timeLabels.shift(); // Remove the oldest label
+                    downloadData.shift(); // Remove the oldest data point
+                }
+                timeLabels.push(timeLabels.length + 1); // Add new label (test number)
+                downloadData.push(parseFloat(speedMbps)); // Add new data point
+
+                // Update the chart
+                speedChart.update();
+
+                statusDiv.textContent = 'Status: Download test complete. Waiting for next test.';
+                 console.log(`Download test successful: ${speedMbps} Mbps`);
+
+                 // The 'blob' object goes out of scope here, allowing garbage collection
+                 // No explicit 'delete' is needed for browser memory management.
+
+            } catch (error) {
+                 downloadResult.textContent = 'Error';
+                 // Add null data point to graph for failed test
+                 if (timeLabels.length >= MAX_DATA_POINTS) {
+                    timeLabels.shift();
+                    downloadData.shift();
+                 }
+                 timeLabels.push(timeLabels.length + 1);
+                 downloadData.push(null); // Indicate failure on the graph
+                 speedChart.update();
+
+                 statusDiv.textContent = `Status: Download test failed - ${error.message}. Retrying...`;
+                 console.error("Download test failed:", error);
+            } finally {
+                 // Schedule the next download test regardless of success or failure
+                 // Add a small delay before the next test starts
+                 downloadTimeout = setTimeout(runDownloadTest, 5000); // Wait 5 seconds before next download
+            }
+        }
+
+        // Event listeners for buttons
+        startButton.addEventListener('click', () => {
+            if (!isTesting) {
+                isTesting = true;
+                startButton.disabled = true;
+                stopButton.disabled = false;
+                statusDiv.textContent = 'Status: Starting tests...';
+
+                // Clear previous data and chart
+                timeLabels.length = 0;
+                downloadData.length = 0;
+                speedChart.update();
+
+                // Start ping test (every 1 second)
+                runPingTest(); // Run first ping immediately
+                pingInterval = setInterval(runPingTest, 1000);
+
+                // Start the first download test
+                runDownloadTest();
+            }
+        });
+
+        stopButton.addEventListener('click', () => {
+            if (isTesting) {
+                isTesting = false;
+                clearInterval(pingInterval); // Stop ping interval
+                clearTimeout(downloadTimeout); // Clear any pending download timeout
+                startButton.disabled = false;
+                stopButton.disabled = true;
+                statusDiv.textContent = 'Status: Stopped';
+                 console.log("Tests stopped.");
+            }
+        });
+
+        // Initial status
+        statusDiv.textContent = 'Status: Idle';
+
+         // Ensure the chart is responsive on window resize
+        window.addEventListener('resize', () => {
+            speedChart.resize();
+        });
+
+    </script>
+</body>
+</html>
